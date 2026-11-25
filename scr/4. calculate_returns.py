@@ -10,7 +10,13 @@ from pathlib import Path
 
 # Load the weights and the daily returns
 weights_df = pd.read_csv(Path('intermediary_steps') / 'final_portfolio_weights.csv')
-daily_returns = pd.read_csv(Path('data') / 'stoxx600_prices_generated_data.csv') 
+daily_prices = pd.read_csv(Path('data') / 'stoxx600_yahoo_prices.csv', index_col='Date', parse_dates=True) 
+
+daily_prices = daily_prices.sort_index()
+daily_returns = daily_prices.pct_change(fill_method=None)
+
+# Defragment the DataFrame
+daily_returns = daily_returns.copy()
 
 # Initialize the strategy column with zeros before adding the data
 daily_returns['BAB_Strategy'] = 0.0
@@ -22,12 +28,13 @@ It's a column with full of zeros
 # Using '_' to ignore the index and removing the 'if' statement
 for _, row in weights_df.iterrows():
     stock_name = row['Stock']
-    weight = row['Weight']
+    weight = row['Stock_Weight']
     
     # Add the profit/loss of this specific stock to our total strategy directly
-    daily_returns['BAB_Strategy'] += daily_returns[stock_name] * weight
+    daily_returns['BAB_Strategy'] += daily_returns[stock_name].fillna(0) * weight
     """
     sum a column * (the constant weight) element by element to the colum of zeros
+    fill NA with zero
     """
     
 """

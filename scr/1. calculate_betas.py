@@ -10,41 +10,82 @@ import numpy as np
 from pathlib import Path
 
 # 1. Load the generated data
-csv_path = Path('data')/ 'stoxx600_prices_generated_data.csv'
+csv_path = Path('data')/ 'stoxx600_yahoo_prices.csv'
 df = pd.read_csv(csv_path, index_col='Date', parse_dates=True)
 
 """
 index_col='Date': Tells Python that the column named "Date" is not regular data, but the main index (the spine or row labels of the table). This ensures every single row is identified by its specific day.
 
 parse_dates=True: Tells Python: "Pay attention, the items in the index are real calendar dates, not just plain text." This is crucial so the program understands the chronological flow of time (which day comes before or after another).
+"""
+
+
+# Ensure dates are sorted from oldest to newest
+df = df.sort_index()
+
+# Convert all prices to numeric values
+df = df.apply(pd.to_numeric, errors='coerce')
 
 
 """
+df.apply() — applies a function (pd.numeric) to every column in the DataFrame (in this case each intex/stock returns)
+pd.to_numeric - converts values to numeric values (if already numeric doesn't do anything)
+errors='coerce' - if can't convert (in our case empty values) converts to NaN
+"""
+
+# Remove invalid non-positive prices
+df = df.where(df > 0)
+"""
+Our values should already be positive (just a safety precaution)
+df.where() - keeps values when the codition is true, otherwise replaces them with NaN
+"""
+
 
 # 2. Calculate daily percentage returns
-returns = df.pct_change().dropna()
+returns = df.pct_change(fill_method=None)
 
 """
-.pct_change(): A built-in Pandas formula. It takes today's price, compares it to yesterday's price, and automatically calculates the percentage it went up or down. It does this all at once for the entire year and for every stock in the table.
-
-.dropna(): Stands for "Drop Not Available" (delete missing values). Think about the very first day in your dataset (e.g., January 1st). Because there is no previous day in the table to compare it to, Python cannot calculate a percentage change for that specific day, resulting in a missing value (NaN). This command simply deletes that first blank row so it does not break the mathematical calculations later in the project.
-
+fill_method=None:
+- Missing prices are not automatically replaced with previous prices.
+- If either today's or yesterday's price is missing, the corresponding return remains NaN.
 """
+
 
 # 3. Separate the index (market) from the stocks
-market_returns = returns['Index_STOXX600']
-stock_returns = returns.drop(columns=['Index_STOXX600'])
+market_returns = returns['INDEX']
+stock_returns = returns.drop(columns=['INDEX'])
 
 # 4. Calculate the Beta for each stock
 betas = {}
 var_market = market_returns.var()
 
 for col in stock_returns.columns:
-    cov_stock_market = stock_returns[col].cov(market_returns)
-    beta = cov_stock_market / var_market
+
+    stock = stock_returns[col]
+
+    valid = stock.notna() & market_returns.notna()
+
+    stock_valid = stock.where(valid)
+    market_valid = market_returns.where(valid)
+
+    cov_stock = stock_valid.cov(market_valid)
+
+    var_market = market_valid.var()
+
+    beta = cov_stock / var_market
+
     betas[col] = beta
+
+
 """
 The variable col temporarily holds the name of the current company being analyzed (for example, "Stock_APPLE").
+
+valid - is a vector of True/False's
+      - its True for a date (index) only if both stock_return and market_return are not NA (if both exist)  
+
+stock_valid / market_valid - respective returns without non valid indices
+
+variance is calculated for each stock, because each stock has is own valid rows
 
 This calculates the "covariance" (.cov()) between the specific stock and the overall market index. Covariance is a statistical tool that measures how closely the daily price changes of this stock match the daily price changes of the market.
 (HAVE IN MIND, ARE TWO COLUMS)
